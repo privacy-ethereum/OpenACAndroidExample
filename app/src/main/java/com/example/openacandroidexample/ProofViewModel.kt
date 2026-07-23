@@ -99,6 +99,9 @@ class ProofViewModel(application: Application) : AndroidViewModel(application) {
      */
     suspend fun signIn(): Boolean = ensureAccessToken() != null
 
+    /** Forwarded from [MainActivity.onResume] to unstick an abandoned Custom Tab login. */
+    fun cancelPendingSignIn() = authService.cancelIfAbandoned()
+
     /**
      * Returns a valid access token, reusing the cached one, refreshing it, or
      * running the interactive PKCE login flow as needed.

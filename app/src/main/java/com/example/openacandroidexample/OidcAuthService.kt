@@ -119,6 +119,16 @@ class OidcAuthService(private val application: Application) {
         pendingAuthorize = null
     }
 
+    /**
+     * Called by [MainActivity] each time it resumes. A successful redirect
+     * always resolves [pendingAuthorize] via [handleRedirect] (through
+     * `onNewIntent`) before `onResume` runs, so if it's still set here the
+     * Custom Tab must have been dismissed without completing the login —
+     * treat that as a cancellation so the suspended [login] call (and the
+     * "開始驗證" button it's blocking) doesn't hang forever.
+     */
+    fun cancelIfAbandoned() = cancelPending()
+
     // MARK: - Token exchange
 
     private suspend fun exchange(code: String, verifier: String) = requestToken(

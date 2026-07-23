@@ -38,8 +38,8 @@ private const val CERT_CHAIN_PROVING_KEY_NAME = "cert_chain_rs4096_proving.key"
 private const val USER_SIG_PROVING_KEY_NAME = "user_sig_rs2048_proving.key"
 private const val SMT_SNAPSHOT_NAME           = "g3-tree-snapshot.json.gz"
 
-private const val SERVER_URL      = "https://b33f-54-237-15-198.ngrok-free.app/challenge"
-private const val LINK_VERIFY_URL = "https://b33f-54-237-15-198.ngrok-free.app/link-verify"
+private const val SERVER_URL      = "https://api-staging.devptt.dev/challenge"
+private const val LINK_VERIFY_URL = "https://api-staging.devptt.dev/link-verify"
 
 const val RETURN_SCHEME = "openac"
 const val RETURN_URL    = "$RETURN_SCHEME://callback"
@@ -82,6 +82,60 @@ class ProofViewModel(application: Application) : AndroidViewModel(application) {
     var verificationStartTime:    Long?   = null
     var totalVerificationSeconds: Double? by mutableStateOf(null); private set
     var verifyMilliseconds:       Int?    by mutableStateOf(null); private set
+
+    // ── OIDC Auth ──────────────────────────────────────────────────────────────
+
+    private val authService = OidcAuthService(application)
+    var authStatus: StepStatus by mutableStateOf(StepStatus.Idle); private set
+    private var accessToken:    String? = null
+    private var refreshToken:   String? = null
+    private var tokenExpiresAt: Long?   = null
+
+    /**
+     * Runs the OIDC login (if needed) from a stable, user-initiated UI context
+     * (e.g. a direct button tap) rather than implicitly inside a `LaunchedEffect`,
+     * since launching the Custom Tab mid-transition-animation can surface as a
+     * spurious cancellation.
+     */
+    suspend fun signIn(): Boolean = ensureAccessToken() != null
+
+    /**
+     * Returns a valid access token, reusing the cached one, refreshing it, or
+     * running the interactive PKCE login flow as needed.
+     */
+    private suspend fun ensureAccessToken(): String? {
+        val token = accessToken
+        val expiresAt = tokenExpiresAt
+        if (token != null && expiresAt != null && System.currentTimeMillis() < expiresAt) {
+            return token
+        }
+        refreshToken?.let { rt ->
+            try {
+                store(authService.refresh(refreshToken = rt))
+                return accessToken
+            } catch (_: Exception) {
+                // Fall back to interactive login below.
+            }
+        }
+        authStatus = StepStatus.Running
+        return try {
+            store(authService.login())
+            authStatus = StepStatus.Success("logged in")
+            accessToken
+        } catch (e: Exception) {
+            authStatus = StepStatus.Failure(e.message ?: "Sign-in failed")
+            null
+        }
+    }
+
+    private fun store(tokens: OidcTokenResponse) {
+        accessToken    = tokens.accessToken
+        refreshToken   = tokens.refreshToken ?: refreshToken
+        tokenExpiresAt = System.currentTimeMillis() + (tokens.expiresIn * 1000L) - 30_000L
+    }
+
+    /** Routes the `openac://oidc-callback` deep link to the in-flight login, if any. */
+    fun handleOidcRedirect(uri: Uri): Boolean = authService.handleRedirect(uri)
 
     // ── Circuit download state ─────────────────────────────────────────────────
 
@@ -311,12 +365,19 @@ class ProofViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun doRegenerateTBS() {
         tbsStatus = StepStatus.Running
+        val token = ensureAccessToken()
+        if (token == null) {
+            challengeExpiresAt = null
+            tbsStatus = StepStatus.Failure(authStatus.errorMessage ?: "Server error")
+            return
+        }
         try {
             val raw = withContext(Dispatchers.IO) {
                 val conn = URL(SERVER_URL).openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("ngrok-skip-browser-warning", "true")
+                conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.setRequestProperty("Connection", "close")
                 conn.doOutput = true
                 conn.outputStream.use { it.write("{}".toByteArray()) }
@@ -583,6 +644,11 @@ class ProofViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun doVerify() {
         verifyStatus = StepStatus.Running
+        val token = ensureAccessToken()
+        if (token == null) {
+            verifyStatus = StepStatus.Failure(authStatus.errorMessage ?: "Server error")
+            return
+        }
         val kd = keysDir
         try {
             val (ccProof, dsProof) = withContext(Dispatchers.Default) {
@@ -597,6 +663,7 @@ class ProofViewModel(application: Application) : AndroidViewModel(application) {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("ngrok-skip-browser-warning", "true")
+                conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.setRequestProperty("Connection", "close")
                 conn.doOutput = true
                 val body = JSONObject().apply {

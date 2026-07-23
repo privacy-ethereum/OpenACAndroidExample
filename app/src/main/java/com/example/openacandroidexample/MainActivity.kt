@@ -18,12 +18,12 @@ class MainActivity : ComponentActivity() {
                 val vm: ProofViewModel = viewModel()
 
                 LaunchedEffect(Unit) {
-                    intent?.data?.let { vm.handleCallback(it) }
+                    intent?.data?.let { uri -> if (!vm.handleOidcRedirect(uri)) vm.handleCallback(uri) }
                 }
 
                 DisposableEffect(vm) {
                     val listener = { newIntent: Intent ->
-                        newIntent.data?.let { vm.handleCallback(it) }
+                        newIntent.data?.let { uri -> if (!vm.handleOidcRedirect(uri)) vm.handleCallback(uri) }
                         Unit
                     }
                     addOnNewIntentListener(listener)

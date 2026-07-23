@@ -47,6 +47,15 @@
                     android:scheme="openac"
                     android:host="callback" />
             </intent-filter>
+            <!-- Deep-link target for PTT OIDC login callback: openac://oidc-callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="openac"
+                    android:host="oidc-callback" />
+            </intent-filter>
         </activity>
     </application>
 

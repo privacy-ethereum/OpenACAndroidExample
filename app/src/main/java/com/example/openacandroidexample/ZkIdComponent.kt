@@ -63,7 +63,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -130,6 +132,7 @@ fun ZkIdComponent(vm: ProofViewModel = viewModel()) {
 @Composable
 private fun IntroScreen(vm: ProofViewModel) {
     var showLearnMore by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize()) {
         ScreenScaffold {
@@ -177,7 +180,19 @@ private fun IntroScreen(vm: ProofViewModel) {
 
             Spacer(Modifier.height(32.dp))
 
-            VerifierPrimaryButton(text = stringResource(R.string.btn_start), onClick = { vm.startFlow() })
+            VerifierPrimaryButton(
+                text    = stringResource(R.string.btn_start),
+                onClick = {
+                    scope.launch {
+                        if (vm.signIn()) vm.startFlow()
+                    }
+                },
+                enabled = !vm.authStatus.isRunning,
+            )
+            vm.authStatus.errorMessage?.let { err ->
+                Spacer(Modifier.height(8.dp))
+                Text(err, style = MaterialTheme.typography.bodySmall, color = VerifierError)
+            }
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = { showLearnMore = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(

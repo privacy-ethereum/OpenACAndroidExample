@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.browser)
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.github.privacy-ethereum:openac-rsa-x509-kotlin:1642904473")
     testImplementation(libs.junit)
